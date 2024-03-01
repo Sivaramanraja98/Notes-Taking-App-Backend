@@ -1,90 +1,82 @@
 const Note = require("../models/noteSchema");
+const { validationResult } = require("express-validator");
 
-const fetchNotes = async (req, res) => {
+const errorHandler = (err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Internal Server Error" });
+};
+
+const fetchNotes = async (req, res, next) => {
   try {
-    // Find the notes
-    const notes = await Note.find({user: req.user._id});
-
-    // Respond with them
-    res.json({ notes });
+    const notes = await Note.find({ user: req.user._id });
+    res.json({ success: true, notes });
   } catch (error) {
-    res.json({ error: error.message });
+    next(error);
   }
 };
 
-const fetchNote = async (req, res) => {
+const fetchNote = async (req, res, next) => {
   try {
-    // Get id off the url
     const noteId = req.params.id;
-
-    // Find the note using that id
-    const note = await Note.findById({_id:noteId,user:req.user._id});
-
-    // Respond with the note
-    res.json({ note });
+    const note = await Note.findOne({ _id: noteId, user: req.user._id });
+    if (!note) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+    res.json({ success: true, note });
   } catch (error) {
-    res.json({ error: error.message });
+    next(error);
   }
 };
 
-const createNote = async (req, res) => {
+const createNote = async (req, res, next) => {
   try {
-    // Get the sent in data off request body
-    const { title, body } = req.body;
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-    // Create a note with it
+    const { title, body } = req.body;
     const note = await Note.create({
       title,
       body,
-      user : req.user._id,
+      user: req.user._id,
     });
-
-    // respond with the new note
-    res.json({ note });
+    res.status(201).json({ message: "Note created successfully", note });
   } catch (error) {
-    res.json({ error: error.message });
+    next(error);
   }
 };
-
-const updateNote = async (req, res) => {
+const updateNote = async (req, res, next) => {
   try {
-    // Get the id off the url
     const noteId = req.params.id;
-
-    // Get the data off the req body
     const { title, body } = req.body;
-
-    // Find and update the record
-    await Note.findOneAndUpdate({_id:noteId, user: req.user._id}, {
-      title,
-      body,
-    });
-
-    // Find updated note
-    const note = await Note.findById({_id:noteId, user: req.user._id});
-
-    // Respond with it
-    res.json({ note });
+    const updatedNote = await Note.findOneAndUpdate(
+      { _id: noteId, user: req.user._id },
+      { title, body },
+      { new: true }
+    );
+    if (!updatedNote) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+    res.json({ success: true, note: updatedNote });
   } catch (error) {
-    res.json({ error: error.message });
+    next(error);
   }
 };
 
-const deleteNote = async (req, res) => {
+const deleteNote = async (req, res, next) => {
   try {
-    // Get id off the URL
     const noteId = req.params.id;
-
-    // Delete the record
-    const result = await Note.findByIdAndDelete(noteId);
-
-    if (result) {
-      res.json({ success: "Record deleted" });
-    } else {
-      res.status(404).json({ error: "Record not found" });
+    const deletedNote = await Note.findOneAndDelete({
+      _id: noteId,
+      user: req.user._id,
+    });
+    if (!deletedNote) {
+      return res.status(404).json({ error: "Note not found" });
     }
+    res.json({ success: true, message: "Note deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
@@ -94,4 +86,5 @@ module.exports = {
   createNote,
   updateNote,
   deleteNote,
+  errorHandler,
 };
